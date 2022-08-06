@@ -1,100 +1,333 @@
-var express = require('express');
-var users = require('./../inc/users')
-var router = express.Router();
+module.exports = (io) => {
 
-router.use(function(req, res, next){
+    let moment = require('moment');
+    let admin = require('./../inc/admin')(io);
+    let express = require('express');
+    let router = express.Router();
 
-    if(['/login'].indexOf(req.url) === -1 && !req.session.user){
+    moment.locale('pt-BR');
 
-        res.redirect('/admin/login');
-    } else {
+    router.use((req, res, next) => {
 
-        next();
-    }
-})
+        if (['/login'].indexOf(req.url) === -1 && (req.session && !req.session.user)) {
 
-router.get('/', (req, res, next) => {
+            res.redirect('/admin/login');
 
-    if (!req.session.user) {
-        res.redirect('/admin/login');
-    } else {
-        res.render('admin/index');
-    }
+        } else {
 
+            next();
 
-});
-
-router.get('/contacts', (req, res, next) => {
-
-    res.render('admin/contacts', {
+        }
 
     });
-});
 
-router.get('/emails', (req, res, next) => {
+    router.get('/', (req, res, next) => {
 
-    res.render('admin/emails', {
+        admin.home().then(data => {
+
+            res.render('admin/index', {
+                url: req.url,
+                user: req.session.user,
+                data
+            });
+
+        });
 
     });
-});
 
-router.post('/login', (req, res, next) => {
+    router.get('/stats', (req, res, next) => {
 
-    if (!req.body.email) {
-        users.render(req, res, 'Insira o email');
-    } else if (!req.body.password) {
-        users.render(req, res, 'Insira a Senha');
-    } else {
+        admin.home().then(data => {
 
-        users.login(req.body.email, req.body.password).then(user => {
+            res.send(data);
 
-            req.session.user = user;
+        });
+
+    });
+
+    router.get('/login', (req, res, next) => {
+
+        res.render('admin/login', {
+            error: null
+        });
+
+    });
+
+    router.post('/login', (req, res, next) => {
+
+        let render = (error) => {
+
+            res.render('admin/login', {
+                error
+            });
+
+        };
+
+        admin.login(req).then(user => {
 
             res.redirect('/admin');
 
         }).catch(err => {
 
-            users.render(req, res, err.message || err);
-        })
-    }
-})
+            render(err);
 
-router.get('/login', (req, res, next) => {
-
-
-
-    users.render(req, res, null);
-});
-
-router.get('/menus', (req, res, next) => {
-
-    res.render('admin/menus', {
+        });
 
     });
-});
 
-router.get('/reservations', (req, res, next) => {
+    router.get('/contacts', (req, res, next) => {
 
-    res.render('admin/reservations', {
-        date: ''
+        admin.contacts().then(data => {
+
+            res.render('admin/contacts', {
+                url: req.url,
+                user: req.session.user,
+                data
+            });
+
+        });
+
     });
-});
 
-router.get('/users', (req, res, next) => {
+    router.delete('/contacts/:id', (req, res, next) => {
 
-    res.render('admin/users', {
+        admin.contactsDelete(req).then(data => {
+
+            res.send(data);
+
+        }).catch(err => {
+
+            res.status(400);
+            res.send({
+                error: err
+            });
+
+        });
 
     });
-});
 
-router.get('/logout', (req, res, next)=>{
+    router.get('/menu', (req, res, next) => {
 
-    delete req.session.user;
+        admin.menus().then(data => {
 
-    res.redirect('/admin/login');
-})
+            res.render('admin/menu', {
+                url: req.url,
+                user: req.session.user,
+                data
+            });
 
+        });
 
+    });
 
+    router.post('/menu', (req, res, next) => {
 
-module.exports = router;
+        admin.menuSave(req).then(data => {
+
+            res.send(data);
+
+        }).catch(err => {
+
+            res.status(400);
+            res.send({
+                error: err
+            });
+
+        });
+
+    });
+
+    router.delete('/menu/:id', (req, res, next) => {
+
+        admin.menuDelete(req).then(data => {
+
+            res.send(data);
+
+        }).catch(err => {
+
+            res.status(400);
+            res.send({
+                error: err
+            });
+
+        });
+
+    });
+
+    router.get('/reservations', (req, res, next) => {
+
+        req.query.start = (req.query.start) ? moment(req.query.start).format('YYYY-MM-DD') : moment().subtract(1, 'year').format('YYYY-MM-DD');
+        req.query.end = (req.query.end) ? moment(req.query.end).format('YYYY-MM-DD') : moment().format('YYYY-MM-DD');
+
+        admin.reservations(req.query).then(pagination => {
+
+            res.render('admin/reservations', {
+                url: req.url,
+                user: req.session.user,
+                pagination,
+                moment,
+                date: {
+                    start: req.query.start,
+                    end: req.query.end
+                }
+            });
+
+        });
+
+    });
+
+    router.get('/reservations/chart', (req, res, next) => {
+
+        req.query.start = (req.query.start) ? moment(req.query.start).format('YYYY-MM-DD') : moment().subtract(1, 'year').format('YYYY-MM-DD');
+        req.query.end = (req.query.end) ? moment(req.query.end).format('YYYY-MM-DD') : moment().format('YYYY-MM-DD');
+
+        admin.reservationsChart(req.query).then(chartData => {
+
+            res.send(chartData);
+
+        });
+
+    });
+
+    router.post('/reservations', (req, res, next) => {
+
+        admin.reservationSave(req).then(data => {
+
+            res.send(data);
+
+        }).catch(err => {
+
+            res.status(400);
+            res.send({
+                error: err
+            });
+
+        });
+
+    });
+
+    router.delete('/reservations/:id', (req, res, next) => {
+
+        admin.reservationsDelete(req).then(data => {
+
+            res.send(data);
+
+        }).catch(err => {
+
+            res.status(400);
+            res.send({
+                error: err
+            });
+
+        });
+
+    });
+
+    router.get('/users', (req, res, next) => {
+
+        admin.users().then(data => {
+
+            res.render('admin/users', {
+                url: req.url,
+                user: req.session.user,
+                data,
+                moment
+            });
+
+        });
+
+    });
+
+    router.post('/users', (req, res, next) => {
+
+        admin.usersSave(req).then(data => {
+
+            res.send(data);
+
+        }).catch(err => {
+
+            res.status(400);
+            res.send({
+                error: err
+            });
+
+        });
+
+    });
+
+    router.post('/users/password', (req, res, next) => {
+
+        admin.usersPassword(req).then(data => {
+
+            res.send(data);
+
+        }).catch(err => {
+
+            res.status(400);
+            res.send({
+                error: err
+            });
+
+        });
+
+    });
+
+    router.delete('/users/:id', (req, res, next) => {
+
+        admin.usersDelete(req).then(data => {
+
+            res.send(data);
+
+        }).catch(err => {
+
+            res.status(400);
+            res.send({
+                error: err
+            });
+
+        });
+
+    });
+
+    router.get('/emails', (req, res, next) => {
+
+        admin.emails().then(data => {
+
+            res.render('admin/emails', {
+                url: req.url,
+                user: req.session.user,
+                data
+            });
+
+        });
+
+    });
+
+    router.delete('/emails/:id', (req, res, next) => {
+
+        admin.emailsDelete(req).then(data => {
+
+            res.send(data);
+
+        }).catch(err => {
+
+            res.status(400);
+            res.send({
+                error: err
+            });
+
+        });
+
+    });
+
+    router.get('/logout', (req, res, next) => {
+
+        delete req.session.user;
+
+        res.redirect('/admin/login');
+
+    });
+
+    return router;
+
+};

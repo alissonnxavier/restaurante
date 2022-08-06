@@ -4,16 +4,18 @@ var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
 var session = require('express-session');
-var Redisstore = require('connect-redis')(session);
+var RedisStore = require('connect-redis')(session);
+var http = require('http');
+var socket = require('socket.io');
+var bodyParser = require('body-parser');
 
-var indexRouter = require('./routes/index');
-var adminRouter = require('./routes/admin');
 
 var app = express();
+var http = http.Server(app);
+var io = socket(http);
 
-// view engine setup
-app.set('views', path.join(__dirname, 'views'));
-app.set('view engine', 'ejs');
+var indexRouter = require('./routes/index')(io);
+var adminRouter = require('./routes/admin')(io);
 
 const { createClient } = require("redis")
 let redisClient = createClient({ legacyMode: true })
@@ -22,7 +24,7 @@ redisClient.connect().catch(console.error)
 
 app.use(session({
 
-  store: new Redisstore({
+  store: new RedisStore({
     client: redisClient
   }),
   host: 'localhost',
@@ -31,10 +33,13 @@ app.use(session({
   resave: true,
   saveUninitialized: true
 }));
+// view engine setup
+app.set('views', path.join(__dirname, 'views'));
+app.set('view engine', 'ejs');
 
 app.use(logger('dev'));
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -57,4 +62,20 @@ app.use(function(err, req, res, next) {
   res.render('error');
 });
 
-module.exports = app;
+io.on('connection', function (socket) {
+
+  console.log('a user connected');
+
+  socket.on('disconnect', function () {
+
+    console.log('user disconnected');
+
+  });
+
+});
+
+http.listen(3000, ()=>{
+
+  console.log('Servidor em execução...');
+
+});
